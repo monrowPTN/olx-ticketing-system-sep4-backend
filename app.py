@@ -54,7 +54,6 @@ from time import time
 # Track last submission times by email
 last_submission_times = {}
 
-# ✅ Submit Ticket Endpoint
 @app.route('/tickets', methods=['POST'])
 def submit_ticket():
     data = request.get_json()
@@ -65,30 +64,33 @@ def submit_ticket():
 
     name = data.get('full_name')
     department = data.get('department')
-    email = (data.get('email') or "").strip().lower()   # ✅ normalize
+    email = (data.get('email') or "").strip().lower()
     service_type = data.get('subject')
     description = data.get('message')
 
     if not all([name, email, service_type, description]):
         return jsonify({'error': 'Missing fields'}), 400
 
-    # ✅ domain check via env (fallback to @olx.com.lb)
     allowed_domain = (os.getenv("ALLOWED_DOMAIN", "@olx.com.lb") or "").strip().lower()
-    print(f"🔎 EMAIL={repr(email)}  ALLOWED_DOMAIN={repr(allowed_domain)}")  # ✅ debug
+    print(f"🔎 EMAIL={repr(email)}  ALLOWED_DOMAIN={repr(allowed_domain)}")
 
     if not re.search(re.escape(allowed_domain) + r'$', email):
         return jsonify({'status': 'forbidden', 'message': f'Only {allowed_domain} emails are allowed'}), 403
 
-    # ✅ NEW: Check for rapid duplicate submissions (same email within 10 seconds)
+    # ✅ Cooldown check (10 seconds)
     now = time()
     if email in last_submission_times and now - last_submission_times[email] < 10:
-        return jsonify({'error': 'Duplicate submission detected. Please wait a few seconds before trying again.'}), 429
+        print("⚠️ Rapid submission detected.")
+        return jsonify({
+            'status': 'cooldown',
+            'message': 'You recently submitted a ticket. Please wait a few seconds before trying again.'
+        }), 200
 
     # ✅ Update last submission time
     last_submission_times[email] = now
 
     try:
-        # ✅ Enhanced: Check if duplicate was submitted within last 10 minutes
+        # ✅ Check for same ticket in last 10 minutes
         ten_minutes_ago = datetime.utcnow() - timedelta(minutes=10)
         existing_ticket = Ticket.query.filter_by(
             email=email,
@@ -98,9 +100,14 @@ def submit_ticket():
         ).filter(Ticket.created_at >= ten_minutes_ago).first()
 
         if existing_ticket:
-            return jsonify({'error': 'A similar ticket was submitted recently. Please try again later or modify your message.'}), 409
+            print("⚠️ Duplicate ticket detected.")
+            return jsonify({
+                'status': 'duplicate',
+                'message': 'This ticket has already been submitted recently.',
+                'ticket_id': existing_ticket.id
+            }), 200
 
-        # 🔁 Insert the ticket into the Neon database
+        # ✅ Create and store new ticket
         ticket = Ticket(
             name=name,
             email=email,
@@ -112,8 +119,7 @@ def submit_ticket():
         db.session.add(ticket)
         db.session.commit()
 
-        ticket_id = ticket.id  # ✅ Get the real ticket ID from Neon DB
-
+        ticket_id = ticket.id
         subject_with_id = f"[Ticket #{ticket_id}] {service_type}"
 
         body = f"""\
