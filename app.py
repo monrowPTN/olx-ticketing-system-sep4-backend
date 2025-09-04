@@ -8,7 +8,7 @@ from flask_cors import CORS
 # ✅ Added required imports
 import os, re, smtplib
 from email.mime.text import MIMEText
-from datetime import datetime
+from datetime import datetime, timedelta  # ✅ added timedelta
 
 # ✅ Initialize Flask app BEFORE using CORS
 app = Flask(__name__)
@@ -88,16 +88,17 @@ def submit_ticket():
     last_submission_times[email] = now
 
     try:
-        # ✅ Check if duplicate already in DB
+        # ✅ Enhanced: Check if duplicate was submitted within last 10 minutes
+        ten_minutes_ago = datetime.utcnow() - timedelta(minutes=10)
         existing_ticket = Ticket.query.filter_by(
             email=email,
             service_type=service_type,
             description=description,
             status="Received"
-        ).first()
+        ).filter(Ticket.created_at >= ten_minutes_ago).first()
 
         if existing_ticket:
-            return jsonify({'error': 'Duplicate ticket already exists.'}), 409
+            return jsonify({'error': 'A similar ticket was submitted recently. Please try again later or modify your message.'}), 409
 
         # 🔁 Insert the ticket into the Neon database
         ticket = Ticket(
