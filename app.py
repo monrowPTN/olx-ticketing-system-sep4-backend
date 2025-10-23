@@ -79,7 +79,7 @@ def submit_ticket():
 
     # ✅ Cooldown check (10 seconds)
     now = time()
-    if email in last_submission_times and now - last_submission_times[email] < 10:
+    if email in last_submission_times and now - last_submission_times[email] < 2:
         print("⚠️ Rapid submission detected.")
         return jsonify({
             'status': 'cooldown',
