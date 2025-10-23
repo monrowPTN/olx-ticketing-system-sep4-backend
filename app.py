@@ -37,6 +37,14 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SUPABASE_DB_URL')  # Use
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
+# ✅ Keep database connection alive (Neon fix)
+with app.app_context():
+    try:
+        db.session.execute("SELECT 1")
+        print("✅ Database connection verified")
+    except Exception as e:
+        print("⚠️ DB warm-up failed:", e)
+
 # ✅ Ticket database model
 class Ticket(db.Model):
     __tablename__ = 'tickets'
